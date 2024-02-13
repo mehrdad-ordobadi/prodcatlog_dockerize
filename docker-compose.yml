@@ -1,31 +1,94 @@
 version: '3.9'
 
+networks:
+  grafana:
+
 services:
   interface:
     build: ./interface/
+    networks:
+      - grafana
     ports:
       - "5002:5002"
     command: "python3 interface.py"
   
   app:
     build: ./app/
+    volumes:
+      - app_logs:/var/log
+    networks:
+      - grafana
     depends_on:
       - mysql
       - redis
     ports:
       - "5001:5001"
     command: sh -c "sleep 15s ; python3 app.py"
+    
+
   mysql:
     build: ./database/
     ports:
       - "3306:3306"
     restart: always
+    networks:
+      - grafana
     environment:
       MYSQL_DATABASE: 'db'
       MYSQL_USER: 'newuser'
       MYSQL_ROOT_PASSWORD: 'userpassword'
+      
   redis:
     image: "redis:alpine"
     command: "redis-server"
+    networks:
+      - grafana
     ports:
       - "6379:6379"
+
+  grafana:
+    image: grafana/grafana:10.0.0
+    ports: 
+      - 3000:3000
+    networks:
+      - grafana
+    environment:
+      - "GF_DEFAULT_APP_MODE=development"
+      - "GF_LOG_LEVEL=debug"
+  
+  promtail:
+    image: grafana/promtail:main-3efd201
+    depends_on:
+      - app
+    volumes: 
+      - app_logs:/var/log
+      - ./promtail/promtail-config.yml:/etc/promtail/promtail-config.yaml
+    networks:
+      - grafana
+  
+  loki:
+    image: grafana/loki:main-7a95cb8
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/config.yaml
+      - loki_data:/loki
+    ports:
+      - 3100:3100
+    networks:
+      - grafana
+    command: -config.file=/etc/loki/local-config.yaml
+
+  prometheus:
+    image: prom/prometheus:v2.45.3
+    volumes:
+      - ./prometheus:/etc/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+    ports:
+      - "9090:9090"
+    networks:
+      - grafana
+
+volumes:
+  app_logs: {}
+  loki_data: {}

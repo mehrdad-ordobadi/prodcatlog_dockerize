@@ -1,14 +1,28 @@
 from flask import Flask, jsonify, request
+from prometheus_flask_exporter import PrometheusMetrics
 from database import db
 from models import Item
 from redis import Redis
+import logging
+from logging.handlers import RotatingFileHandler
+
+def configure_logging(app):
+    if not app.debug:
+        # Set up a file handler
+        file_handler = RotatingFileHandler('/var/log/flask_app.log', maxBytes=10240, backupCount=10)
+        file_handler.setLevel(logging.INFO)
+        app.logger.addHandler(file_handler)
+        app.logger.setLevel(logging.INFO)
+        app.logger.info('Application startup')
 
 
 def create_app():
     app = Flask(__name__)
-    
+    metrics = PrometheusMetrics(app, path='/metrics')
+    configure_logging(app)
     app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://newuser:userpassword@mysql/db'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    app.logger.error('Test error message')
 
     db.init_app(app)
 
@@ -41,6 +55,7 @@ def create_app():
             return jsonify({'name': item.name}), 201
         except Exception as e:
             db.session.rollback()
+            app.logger.error('Failed to add item: %s', str(e), exc_info=False)
             return jsonify({'error': str(e)}), 500
 
     return app

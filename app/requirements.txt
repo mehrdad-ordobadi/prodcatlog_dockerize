@@ -3,3 +3,5 @@ Flask-SQLAlchemy
 pymysql
 redis
 cryptography
+prometheus_flask_exporter
+python-logging-loki
